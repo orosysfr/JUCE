@@ -1230,27 +1230,27 @@ int JUCE_CALLTYPE NativeMessageBox::showYesNoBox (AlertWindow::AlertIconType /*i
 }
 
 //==============================================================================
-static bool androidScreenSaverEnabled = false; 
- 
-void Desktop::setScreenSaverEnabled (bool shouldEnable) 
-{ 
-    constexpr auto FLAG_KEEP_SCREEN_ON = 0x80; 
- 
-    if (shouldEnable != androidScreenSaverEnabled) 
-    { 
-        LocalRef<jobject> activity (getMainActivity()); 
- 
-        if (activity != nullptr) 
-        { 
-            auto* env = getEnv(); 
- 
-            LocalRef<jobject> mainWindow (env->CallObjectMethod (activity.get(), AndroidActivity.getWindow)); 
-            env->CallVoidMethod(mainWindow.get(), AndroidWindow.setFlags, shouldEnable ? FLAG_KEEP_SCREEN_ON : 0, FLAG_KEEP_SCREEN_ON); 
-        } 
- 
-        androidScreenSaverEnabled = shouldEnable; 
-    } 
-} 
+static bool androidScreenSaverEnabled = true;
+
+void Desktop::setScreenSaverEnabled (bool shouldEnable)
+{
+    constexpr auto FLAG_KEEP_SCREEN_ON = 0x80;
+
+    if (shouldEnable != androidScreenSaverEnabled)
+    {
+        LocalRef<jobject> activity (getMainActivity());
+
+        if (activity != nullptr)
+        {
+            auto* env = getEnv();
+
+            LocalRef<jobject> mainWindow (env->CallObjectMethod (activity.get(), AndroidActivity.getWindow));
+            env->CallVoidMethod (mainWindow.get(), AndroidWindow.setFlags, shouldEnable ? 0 : FLAG_KEEP_SCREEN_ON, FLAG_KEEP_SCREEN_ON);
+        }
+
+        androidScreenSaverEnabled = shouldEnable;
+    }
+}
 
 bool Desktop::isScreenSaverEnabled()
 {
