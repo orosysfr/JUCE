@@ -236,7 +236,7 @@ public:
             LocalRef<jobject> windowLayoutParams (env->NewObject (AndroidWindowManagerLayoutParams, AndroidWindowManagerLayoutParams.create,
                                                                   physicalBounds.getWidth(), physicalBounds.getHeight(),
                                                                   physicalBounds.getX(), physicalBounds.getY(),
-                                                                  TYPE_APPLICATION, FLAG_NOT_TOUCH_MODAL | FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_NO_LIMITS | FLAG_NOT_FOCUSABLE,
+                                                                  TYPE_APPLICATION, FLAG_NOT_TOUCH_MODAL | FLAG_LAYOUT_IN_SCREEN | FLAG_NOT_FOCUSABLE,
                                                                   component.isOpaque() ? PIXEL_FORMAT_OPAQUE : PIXEL_FORMAT_TRANSPARENT));
             env->SetIntField (windowLayoutParams.get(), AndroidWindowManagerLayoutParams.gravity, GRAVITY_LEFT | GRAVITY_TOP);
             env->SetIntField (windowLayoutParams.get(), AndroidWindowManagerLayoutParams.windowAnimations, 0x01030000 /* android.R.style.Animation */);
@@ -351,7 +351,7 @@ public:
                     LocalRef<jobject> windowLayoutParams (env->NewObject (AndroidWindowManagerLayoutParams, AndroidWindowManagerLayoutParams.create,
                                                                           r.getWidth(), r.getHeight(),
                                                                           r.getX(), r.getY(),
-                                                                          TYPE_APPLICATION, FLAG_NOT_TOUCH_MODAL | FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_NO_LIMITS,
+                                                                          TYPE_APPLICATION, FLAG_NOT_TOUCH_MODAL | FLAG_LAYOUT_IN_SCREEN,
                                                                           component.isOpaque() ? PIXEL_FORMAT_OPAQUE : PIXEL_FORMAT_TRANSPARENT));
                     env->SetIntField (windowLayoutParams.get(), AndroidWindowManagerLayoutParams.gravity, 0x3 /* LEFT */ | 0x30 /* TOP */);
                     env->CallVoidMethod (viewGroup.get(), AndroidViewManager.updateViewLayout, view.get(), windowLayoutParams.get());
