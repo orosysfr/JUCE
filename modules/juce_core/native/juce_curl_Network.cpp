@@ -220,7 +220,11 @@ public:
     //==============================================================================
     bool setOptions()
     {
-        auto address = url.toString (! isPost);
+        // Change from DD
+        // For the following assert: JUCE cannot handle postData and parameters at the same time... :-(
+        // https://forum.juce.com/t/achieving-http-put-with-juce-url-class/32923
+        bool urlWithParams = !isPost || (url.postData.getSize() != 0);
+        auto address = url.toString (urlWithParams);
 
         curl_version_info_data* data = symbols->curl_version_info (CURLVERSION_NOW);
         jassert (data != nullptr);

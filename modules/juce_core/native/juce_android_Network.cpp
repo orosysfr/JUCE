@@ -373,7 +373,11 @@ public:
         }
         else
         {
-            String address = url.toString (! isPost);
+            // Change from DD
+            // For the following assert: JUCE cannot handle postData and parameters at the same time... :-(
+            // https://forum.juce.com/t/achieving-http-put-with-juce-url-class/32923
+            bool urlWithParams = !isPost || (url.postData.getSize() != 0);
+            String address = url.toString (urlWithParams);
 
             if (! address.contains ("://"))
                 address = "http://" + address;

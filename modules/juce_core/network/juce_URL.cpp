@@ -491,8 +491,13 @@ void URL::createHeadersAndPostData (String& headers, MemoryBlock& postDataToWrit
     }
     else
     {
-        data << URLHelpers::getMangledParameters (*this)
-             << postData;
+        // Change from DD
+        if (postData.getSize() == 0) {
+            data << URLHelpers::getMangledParameters(*this);
+        }
+        else {
+            data << postData;
+        }
 
         // if the user-supplied headers didn't contain a content-type, add one now..
         if (! headers.containsIgnoreCase ("Content-Type"))

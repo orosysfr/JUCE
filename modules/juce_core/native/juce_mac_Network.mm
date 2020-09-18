@@ -1100,8 +1100,11 @@ private:
     void createConnection()
     {
         jassert (connection == nullptr);
-
-        if (NSURL* nsURL = [NSURL URLWithString: juceStringToNS (url.toString (! isPost))])
+        // Change from DD
+        // For the following assert: JUCE cannot handle postData and parameters at the same time... :-(
+        // https://forum.juce.com/t/achieving-http-put-with-juce-url-class/32923
+        bool urlWithParams = !isPost || (url.postData.getSize() != 0);
+        if (NSURL* nsURL = [NSURL URLWithString: juceStringToNS (url.toString (urlWithParams))])
         {
             if (NSMutableURLRequest* req = [NSMutableURLRequest requestWithURL: nsURL
                                                                    cachePolicy: NSURLRequestReloadIgnoringLocalCacheData
