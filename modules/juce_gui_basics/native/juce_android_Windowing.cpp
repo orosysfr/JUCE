@@ -266,7 +266,7 @@ public:
             LocalRef<jobject> windowLayoutParams (env->NewObject (AndroidWindowManagerLayoutParams, AndroidWindowManagerLayoutParams.create,
                                                                   physicalBounds.getWidth(), physicalBounds.getHeight(),
                                                                   physicalBounds.getX(), physicalBounds.getY(),
-                                                                  TYPE_APPLICATION, FLAG_NOT_TOUCH_MODAL | FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_NO_LIMITS | FLAG_NOT_FOCUSABLE,
+                                                                  TYPE_APPLICATION, FLAG_NOT_TOUCH_MODAL | FLAG_LAYOUT_IN_SCREEN | FLAG_NOT_FOCUSABLE,
                                                                   component.isOpaque() ? PIXEL_FORMAT_OPAQUE : PIXEL_FORMAT_TRANSPARENT));
 
             env->SetIntField (windowLayoutParams.get(), AndroidWindowManagerLayoutParams.gravity, GRAVITY_LEFT | GRAVITY_TOP);
@@ -370,7 +370,7 @@ public:
 
                 LocalRef<jobject> windowLayoutParams (env->NewObject (AndroidWindowManagerLayoutParams, AndroidWindowManagerLayoutParams.create,
                                                                       bounds.getWidth(), bounds.getHeight(), bounds.getX(), bounds.getY(),
-                                                                      TYPE_APPLICATION, FLAG_NOT_TOUCH_MODAL | FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_NO_LIMITS,
+                                                                      TYPE_APPLICATION, FLAG_NOT_TOUCH_MODAL | FLAG_LAYOUT_IN_SCREEN,
                                                                       component.isOpaque() ? PIXEL_FORMAT_OPAQUE : PIXEL_FORMAT_TRANSPARENT));
 
                 env->SetIntField (windowLayoutParams.get(), AndroidWindowManagerLayoutParams.gravity, GRAVITY_LEFT | GRAVITY_TOP);
