@@ -1072,7 +1072,8 @@ private:
      CALLBACK (getInputFocusViewIdJni,           "getInputFocusViewId",           "(J)Ljava/lang/Integer;") \
      CALLBACK (getAccessibilityFocusViewIdJni,   "getAccessibilityFocusViewId",   "(J)Ljava/lang/Integer;") \
 
-    DECLARE_JNI_CLASS_WITH_BYTECODE (ComponentPeerView, "com/rmsl/juce/ComponentPeerView", 16, javaComponentPeerView, sizeof (javaComponentPeerView))
+    DECLARE_JNI_CLASS_WITH_BYTECODE (ComponentPeerView, "com/rmsl/juce/ComponentPeerView", 23, javaComponentPeerView, sizeof (javaComponentPeerView))
+//    DECLARE_JNI_CLASS_WITH_MIN_SDK (ComponentPeerView, "com/rmsl/juce/ComponentPeerView", 16)    
     #undef JNI_CLASS_MEMBERS
 
     static void JNICALL handlePaintJni          (JNIEnv*, jobject /*view*/, jlong host, jobject canvas, jobject paint)           { if (auto* myself = reinterpret_cast<AndroidComponentPeer*> (host)) myself->handlePaintCallback (canvas, paint); }
