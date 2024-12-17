@@ -2654,10 +2654,12 @@ AUSDK_EXPORT extern "C" void* JUCE_AU_ENTRY_POINT_NAME (const AudioComponentDesc
 {
 #if TN_CHANGES
     switch (inDesc->componentType) {
-    case kAudioUnitType_MIDIProcessor:  // 'aumf'
+        case kAudioUnitType_MusicDevice:    // 'aumu'
+        case kAudioUnitType_MusicEffect:    // 'aumf'
+        case kAudioUnitType_MIDIProcessor:  // 'aumi'
         return ausdk::AUMusicDeviceFactory<JuceAU>::Factory(inDesc);
-    case kAudioUnitType_Effect:         // 'aufx'
-    default:                            // others
+    case kAudioUnitType_Effect:             // 'aufx'
+    default:                                // anything else
         return ausdk::AUBaseFactory<JuceAU>::Factory(inDesc);
     }
 #else
