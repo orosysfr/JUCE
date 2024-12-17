@@ -2652,7 +2652,17 @@ AUSDK_COMPONENT_ENTRY (FACTORY_BASE_CLASS, JuceAU)
              extern "C" void* JUCE_AU_ENTRY_POINT_NAME (const AudioComponentDescription* inDesc);
 AUSDK_EXPORT extern "C" void* JUCE_AU_ENTRY_POINT_NAME (const AudioComponentDescription* inDesc)
 {
+#if TN_CHANGES
+    switch (inDesc->componentType) {
+    case kAudioUnitType_MIDIProcessor:  // 'aumf'
+        return ausdk::AUMusicDeviceFactory<JuceAU>::Factory(inDesc);
+    case kAudioUnitType_Effect:         // 'aufx'
+    default:                            // others
+        return ausdk::AUBaseFactory<JuceAU>::Factory(inDesc);
+    }
+#else
     return JuceAUFactory (inDesc);
+#endif
 }
 
 #endif
