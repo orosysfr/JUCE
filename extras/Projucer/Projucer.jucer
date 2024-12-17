@@ -9,7 +9,7 @@
     <XCODE_MAC targetFolder="Builds/MacOSX" documentExtensions=".jucer" bigIcon="Zrx1Gl"
                microphonePermissionNeeded="1" cameraPermissionNeeded="1" smallIcon="Zrx1Gl"
                applicationCategory="public.app-category.developer-tools" extraLinkerFlags="-Wl,-weak_reference_mismatches,weak"
-               extraDefs="JUCE_SILENCE_XCODE_15_LINKER_WARNING=1">
+               extraDefs="JUCE_SILENCE_XCODE_15_LINKER_WARNING=1&#10;TN_CHANGES=1">
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" isDebug="1" targetName="Projucer" cppLibType="libc++"
                        recommendedWarnings="LLVM"/>

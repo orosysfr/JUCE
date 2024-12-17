@@ -292,6 +292,52 @@ namespace juce::build_tools
         plistKey.addTextElement ("AudioComponents");
 
         XmlElement plistEntry ("array");
+
+#if TN_CHANGES
+        constexpr char const* auTypes[] = { "aumf", "aufx" };
+        for (auto const auType : auTypes) {
+            auto* dict = plistEntry.createNewChildElement ("dict");
+
+            auto truncatedCode = pluginManufacturerCode.substring (0, 4);
+            auto pluginSubType = pluginCode.substring (0, 4);
+
+            if (truncatedCode.toLowerCase() == truncatedCode)
+            {
+                throw SaveError ("AudioUnit plugin code identifiers invalid!\n\n"
+                                 "You have used only lower case letters in your AU plugin manufacturer identifier. "
+                                 "You must have at least one uppercase letter in your AU plugin manufacturer "
+                                 "identifier code.");
+            }
+
+            addPlistDictionaryKey (*dict, "name", pluginManufacturer + ": " + pluginName);
+            addPlistDictionaryKey (*dict, "description", pluginDescription);
+            addPlistDictionaryKey (*dict, "factoryFunction", pluginAUExportPrefix + "Factory");
+            addPlistDictionaryKey (*dict, "manufacturer", truncatedCode);
+            addPlistDictionaryKey (*dict, "type", String (auType));
+            addPlistDictionaryKey (*dict, "subtype", pluginSubType);
+            addPlistDictionaryKey (*dict, "version", getAUVersionAsHexInteger (*this));
+
+            if (isAuSandboxSafe)
+            {
+                addPlistDictionaryKey (*dict, "sandboxSafe", true);
+            }
+            else if (! suppressResourceUsage)
+            {
+                dict->createNewChildElement ("key")->addTextElement ("resourceUsage");
+                auto* resourceUsageDict = dict->createNewChildElement ("dict");
+
+                addPlistDictionaryKey (*resourceUsageDict, "network.client", true);
+                addPlistDictionaryKey (*resourceUsageDict, "temporary-exception.files.all.read-write", true);
+            }
+
+            if (isPluginARAEffect)
+            {
+                dict->createNewChildElement ("key")->addTextElement ("tags");
+                auto* tagsArray = dict->createNewChildElement ("array");
+                tagsArray->createNewChildElement ("string")->addTextElement ("ARA");
+            }
+        }
+#else
         auto* dict = plistEntry.createNewChildElement ("dict");
 
         auto truncatedCode = pluginManufacturerCode.substring (0, 4);
@@ -332,7 +378,7 @@ namespace juce::build_tools
             auto* tagsArray = dict->createNewChildElement ("array");
             tagsArray->createNewChildElement ("string")->addTextElement ("ARA");
         }
-
+#endif
         return { plistKey, plistEntry };
     }
 
