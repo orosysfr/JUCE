@@ -294,8 +294,9 @@ namespace juce::build_tools
         XmlElement plistEntry ("array");
 
 #if TN_CHANGES
-        constexpr char const* auTypes[] = { "aumf", "aufx" };
-        for (auto const auType : auTypes) {
+        struct AUDesc { char const* type; char const* suffix; };
+        constexpr AUDesc auDescs[] = { { "aumf", "" }, { "aufx", " (No MIDI)" } };
+        for (auto const auDesc : auDescs) {
             auto* dict = plistEntry.createNewChildElement ("dict");
 
             auto truncatedCode = pluginManufacturerCode.substring (0, 4);
@@ -309,11 +310,11 @@ namespace juce::build_tools
                                  "identifier code.");
             }
 
-            addPlistDictionaryKey (*dict, "name", pluginManufacturer + ": " + pluginName);
-            addPlistDictionaryKey (*dict, "description", pluginDescription);
+            addPlistDictionaryKey (*dict, "name", pluginManufacturer + ": " + pluginName + String (auDesc.suffix));
+            addPlistDictionaryKey (*dict, "description", pluginDescription + String (auDesc.suffix));
             addPlistDictionaryKey (*dict, "factoryFunction", pluginAUExportPrefix + "Factory");
             addPlistDictionaryKey (*dict, "manufacturer", truncatedCode);
-            addPlistDictionaryKey (*dict, "type", String (auType));
+            addPlistDictionaryKey (*dict, "type", String (auDesc.type));
             addPlistDictionaryKey (*dict, "subtype", pluginSubType);
             addPlistDictionaryKey (*dict, "version", getAUVersionAsHexInteger (*this));
 
