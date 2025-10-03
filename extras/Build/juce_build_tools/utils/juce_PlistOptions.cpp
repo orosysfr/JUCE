@@ -293,6 +293,7 @@ namespace juce::build_tools
 
         XmlElement plistEntry ("array");
 
+#define TN_CHANGES 1
 #if TN_CHANGES
         struct AUDesc { char const* type; char const* suffix; };
         constexpr AUDesc auDescs[] = { { "aumf", "" }, { "aufx", " (No MIDI)" } };
