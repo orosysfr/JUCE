@@ -2620,10 +2620,22 @@ private:
              extern "C" void* JuceAUFactory (const AudioComponentDescription* inDesc);
 AUSDK_EXPORT extern "C" void* JuceAUFactory (const AudioComponentDescription* inDesc)
 {
+#if TN_CHANGES
+    switch (inDesc->componentType) {
+    case kAudioUnitType_MusicDevice:    // 'aumu'
+    case kAudioUnitType_MusicEffect:    // 'aumf'
+    case kAudioUnitType_MIDIProcessor:  // 'aumi'
+    case kAudioUnitType_Effect:         // 'aufx'
+        return ausdk::AUMusicDeviceFactory<JuceAU>::Factory (inDesc);
+    default:                            // anything else
+        return ausdk::AUBaseFactory<JuceAU>::Factory (inDesc);
+    }
+#else
     if constexpr (pluginWantsMidiInput || pluginProducesMidiOutput)
         return ausdk::AUMusicDeviceFactory<JuceAU>::Factory (inDesc);
     else
         return ausdk::AUBaseFactory<JuceAU>::Factory (inDesc);
+#endif
 }
 
 #define JUCE_AU_ENTRY_POINT_NAME JUCE_CONCAT (JucePlugin_AUExportPrefix, Factory)
