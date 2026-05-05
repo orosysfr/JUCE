@@ -450,6 +450,10 @@ public:
 
     API_AVAILABLE (ios (13.0)) void onHover (UIHoverGestureRecognizer*);
     void onScroll (UIPanGestureRecognizer*);
+#if TN_CHANGES
+    // Long-press → right-click on touch devices (iPad / Mac Catalyst).
+    void onLongPress (UILongPressGestureRecognizer*);
+#endif
 
     Range<int> getMarkedTextRange() const
     {
@@ -807,6 +811,49 @@ MultiTouchMapper<UITouch*> UIViewComponentPeer::currentTouches;
         [self addGestureRecognizer: panRecognizer];
     }
 
+#if TN_CHANGES
+    // Long-press → right-click.
+    // The normal touch flow is preserved (cancelsTouchesInView = NO), so the initial mouseDown(left) still dispatches at touchesBegan.
+    // After 0.5s of stationary touch (≤10pt movement) the recognizer fires once and we synthesize a popup-menu mouseDown/Up at the long-press location, which any component checking event.mods.isPopupMenu() (centralized in TnGUI/MouseClickHandler) treats as a context-menu request.
+    auto longPressRecognizer = [[[UILongPressGestureRecognizer alloc] initWithTarget: self action: @selector (onLongPress:)] autorelease];
+    [longPressRecognizer setMinimumPressDuration: 0.5];
+    // 3pt (Apple's default is 10pt) — balances drag responsiveness with finger
+    // tremor tolerance. 1pt feels great with mouse/trackpad on Catalyst but is
+    // too tight for real iPad finger touches; 3pt accommodates natural tremor
+    // while still letting deliberate drags fail the recognizer quickly.
+    [longPressRecognizer setAllowableMovement: 3.0];
+    // setCancelsTouchesInView: YES is required so iOS sends touchesCancelled to
+    // JUCE when the long-press recognizes. Without this the in-flight touch
+    // keeps the touch-0 MouseInputSource in a left-button-down state, and our
+    // synthesized right-click on the same source gets coalesced into a state
+    // change rather than a fresh mouseDown — components never see a discrete
+    // popup-menu click. With YES, JUCE's touchesCancelled path cleans the
+    // source (mouseUp with cleared modifiers) before we synthesize the
+    // right-click. Quick taps (<minimumPressDuration) never recognize, so
+    // they're unaffected.
+    [longPressRecognizer setCancelsTouchesInView: YES];
+    // setDelaysTouchesBegan: YES holds touchesBegan delivery to the view until
+    // the recognizer either recognizes or fails. Without this, JUCE dispatches
+    // mouseDown(left) at touchesBegan immediately, components fire their normal
+    // click action, and 500ms later we ALSO synthesize a right-click — the
+    // component receives both, producing a double action. Holding touchesBegan
+    // means the long-press path delivers ONLY the synthesized right-click,
+    // while quick taps and drags receive their buffered touchesBegan as soon
+    // as the recognizer fails (on touchesEnded for taps, on movement >10pt for
+    // drags) — both produce the normal click/drag flow with negligible delay.
+    [longPressRecognizer setDelaysTouchesBegan: YES];
+    // Mac Catalyst (and iPad with attached trackpad/mouse) delivers pointer
+    // events as UITouchTypeIndirectPointer. Gesture recognizers do NOT accept
+    // indirect pointer touches by default — without this, the recognizer
+    // never fires for trackpad clicks on Catalyst. Direct + indirect-pointer
+    // covers both finger touches on iPad and pointer clicks on Catalyst.
+    if (@available (iOS 13.4, *))
+    {
+        [longPressRecognizer setAllowedTouchTypes: @[@(UITouchTypeDirect), @(UITouchTypeIndirectPointer)]];
+    }
+    [self addGestureRecognizer: longPressRecognizer];
+#endif
+
     return self;
 }
 
@@ -921,6 +968,14 @@ MultiTouchMapper<UITouch*> UIViewComponentPeer::currentTouches;
     if (owner != nullptr)
         owner->onScroll (gesture);
 }
+
+#if TN_CHANGES
+- (void) onLongPress: (UILongPressGestureRecognizer*) gesture
+{
+    if (owner != nullptr)
+        owner->onLongPress (gesture);
+}
+#endif
 
 static std::optional<int> getKeyCodeForSpecialCharacterString (StringRef characters)
 {
@@ -2190,6 +2245,51 @@ void UIViewComponentPeer::onScroll (UIPanGestureRecognizer* gesture)
                       UIViewComponentPeer::getMouseTime ([[NSProcessInfo processInfo] systemUptime]),
                       details);
 }
+
+#if TN_CHANGES
+void UIViewComponentPeer::onLongPress (UILongPressGestureRecognizer* gesture)
+{
+    // UILongPressGestureRecognizer transitions Possible → Began (when minimumPressDuration
+    // elapses with movement within allowableMovement) → Changed → Ended/Cancelled.
+    // We only act on Began so we synthesize exactly one right-click per long-press cycle.
+    if ([gesture state] != UIGestureRecognizerStateBegan)
+        return;
+
+    auto pos = convertToPointFloat ([gesture locationInView: view]);
+    juce_lastMousePos = pos + getBounds (true).getPosition().toFloat();
+
+    // Defer the synthesized right-click to the next main-runloop iteration.
+    // With cancelsTouchesInView = YES, iOS sends touchesCancelled to the view
+    // when the gesture recognizes — but the action method may run before the
+    // cancellation has been processed by JUCE's handleTouches, leaving the
+    // touch-0 MouseInputSource still in leftButton state. A synthesized event
+    // arriving on that same active source gets coalesced rather than producing
+    // a discrete mouseDown for component handlers. dispatch_async pushes our
+    // synthesis past the runloop iteration that delivers touchesCancelled,
+    // so JUCE has already cleaned the source by the time we dispatch.
+    auto* peer = this;
+    dispatch_async (dispatch_get_main_queue(), ^{
+        if (! isValidPeer (peer))
+            return;
+
+        auto const time = UIViewComponentPeer::getMouseTime ([[NSProcessInfo processInfo] systemUptime]);
+
+        auto downMods = ModifierKeys::getCurrentModifiers().withoutMouseButtons().withFlags (ModifierKeys::rightButtonModifier);
+        auto upMods   = downMods.withoutMouseButtons();
+
+        peer->handleMouseEvent (MouseInputSource::InputSourceType::touch, pos, downMods,
+                                MouseInputSource::defaultPressure, MouseInputSource::defaultOrientation,
+                                time, {});
+
+        if (! isValidPeer (peer))
+            return;
+
+        peer->handleMouseEvent (MouseInputSource::InputSourceType::touch, pos, upMods,
+                                MouseInputSource::defaultPressure, MouseInputSource::defaultOrientation,
+                                time, {});
+    });
+}
+#endif
 
 //==============================================================================
 void UIViewComponentPeer::viewFocusGain()
