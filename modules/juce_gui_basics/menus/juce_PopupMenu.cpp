@@ -1402,7 +1402,16 @@ private:
     }
 
     bool mouseWasOver = false;
+#if JUCE_IOS
+    // TN_CHANGES — paired with the long-press synthesis in juce_UIViewComponentPeer_ios.mm.
+    // The synthesized right-click dispatches to the menu-trigger component, not to this popup,
+    // so the desktop guard against "the same click triggers an item on mouseUp" has no work here.
+    // Leaving the default false would make clean single-finger taps inside submenus never trigger,
+    // because a tap with no movement produces no mouseDrag/mouseMove to flip the flag.
+    bool mouseUpCanTrigger = true;
+#else
     bool mouseUpCanTrigger = ! ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown();
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MenuWindow)
 };
