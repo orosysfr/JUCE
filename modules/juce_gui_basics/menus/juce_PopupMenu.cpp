@@ -1496,7 +1496,7 @@ public:
          auto *windowUnderMouse = getMenuWindowForPosition (screenPos);
          if (windowUnderMouse)
          {
-             windowUnderMouse->alterChildYPos(newPosition - windowUnderMouse->childYOffset);
+             windowUnderMouse->alterChildYPos (roundToInt (newPosition - windowUnderMouse->childYOffset));
          }
     }
 
