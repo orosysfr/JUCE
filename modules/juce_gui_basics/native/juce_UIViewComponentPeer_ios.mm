@@ -1306,6 +1306,11 @@ static void postTraitChangeNotification (UITraitCollection* previousTraitCollect
     if (juceKeyboardLiftPoints == offset)
         return;
 
+    // Recover the un-lifted "JUCE frame" before we update the cached lift, so the setFrame:
+    // override below will bake the new lift in when we re-apply.
+    CGRect juceFrame = self.frame;
+    juceFrame.origin.y += juceKeyboardLiftPoints;
+
     juceKeyboardLiftPoints = offset;
 
     NSTimeInterval duration = 0.25;
@@ -1325,9 +1330,19 @@ static void postTraitChangeNotification (UITraitCollection* previousTraitCollect
                         options: options | UIViewAnimationOptionBeginFromCurrentState
                      animations: ^
     {
-        self.transform = CGAffineTransformMakeTranslation (0, -offset);
+        self.frame = juceFrame;
     }
                      completion: nil];
+}
+
+- (void) setFrame: (CGRect) frame
+{
+    // Bake the active keyboard lift into the frame. This survives JUCE's own setBounds calls
+    // (driven by displays->refresh() once the inset detector fires), unlike a CGAffineTransform.
+    if (juceKeyboardLiftPoints != 0)
+        frame.origin.y -= juceKeyboardLiftPoints;
+
+    [super setFrame: frame];
 }
 #endif
 
