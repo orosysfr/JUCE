@@ -767,15 +767,30 @@ void Displays::findDisplays (const Desktop& desktop)
                         if (display == nullptr)
                             return {};
 
-                        const auto rect = convertToRectInt ([value CGRectValue]);
+                        const auto rect   = convertToRectInt ([value CGRectValue]);
+                        const auto screen = display->totalArea;
 
+                        if (rect.isEmpty() || ! rect.intersects (screen))
+                            return {};
+
+                        // iPad split / floating keyboards are clearly narrower than the screen
+                        // and never reach a horizontal extent — JUCE reports no inset for these.
+                        const auto reachesLeft  = rect.getX()     <= screen.getX();
+                        const auto reachesRight = rect.getRight() >= screen.getRight();
+
+                        if (! (reachesLeft && reachesRight))
+                            return {};
+
+                        // Pre-iPadOS-26 docked keyboards had their bottom edge equal to the screen
+                        // bottom. iPadOS 26's new windowing / home-indicator interaction makes that
+                        // exact-equality unreliable, so anchor on which half of the screen the
+                        // keyboard sits in instead.
                         BorderSize<double> result;
 
-                        if (rect.getY() == display->totalArea.getY())
-                            result.setTop (rect.getHeight());
-
-                        if (rect.getBottom() == display->totalArea.getBottom())
-                            result.setBottom (rect.getHeight());
+                        if (rect.getCentreY() <= screen.getCentreY())
+                            result.setTop (rect.getBottom() - screen.getY());
+                        else
+                            result.setBottom (screen.getBottom() - rect.getY());
 
                         return result;
                     }));
