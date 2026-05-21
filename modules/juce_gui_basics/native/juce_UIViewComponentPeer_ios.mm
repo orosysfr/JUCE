@@ -342,7 +342,15 @@ struct CADisplayLinkDeleter
 @public
     UIViewComponentPeer* owner;
     std::unique_ptr<CADisplayLink, CADisplayLinkDeleter> displayLink;
+#if TN_CHANGES
+    CGFloat juceKeyboardLiftPoints;
+#endif
 }
+
+#if TN_CHANGES
+- (void) juceKeyboardWillChangeFrame: (NSNotification*) note;
+- (void) juceKeyboardWillHide:        (NSNotification*) note;
+#endif
 
 @end
 
@@ -854,11 +862,30 @@ MultiTouchMapper<UITouch*> UIViewComponentPeer::currentTouches;
     [self addGestureRecognizer: longPressRecognizer];
 #endif
 
+#if TN_CHANGES
+    // iOS keyboard auto-lift: when the keyboard appears and would cover the focused text
+    // input, shift this view upward so the field stays visible. Restores reliable
+    // coverage on iPadOS 26 windowed mode where keyboardInsets-driven shifts at the
+    // component level alone are no longer sufficient.
+    juceKeyboardLiftPoints = 0;
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector (juceKeyboardWillChangeFrame:)
+                                                 name: UIKeyboardWillChangeFrameNotification
+                                               object: nil];
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector (juceKeyboardWillHide:)
+                                                 name: UIKeyboardWillHideNotification
+                                               object: nil];
+#endif
+
     return self;
 }
 
 - (void) dealloc
 {
+#if TN_CHANGES
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
+#endif
     [owner->hiddenTextInput.get() removeFromSuperview];
     displayLink = nullptr;
 
@@ -1207,6 +1234,102 @@ static void postTraitChangeNotification (UITraitCollection* previousTraitCollect
 
     return nil;
 }
+
+#if TN_CHANGES
+- (void) juceKeyboardWillChangeFrame: (NSNotification*) note
+{
+    if (owner == nullptr)
+        return;
+
+    NSDictionary* userInfo = [note userInfo];
+    auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
+
+    if (userInfo == nil || display == nullptr)
+        return;
+
+    // The Windowing observer runs from the same notification but the order between observers
+    // isn't guaranteed, so re-derive the keyboard top from this notification's user info rather
+    // than reading display->keyboardInsets (which may not have updated yet).
+    auto* value = static_cast<NSValue*> ([userInfo objectForKey: UIKeyboardFrameEndUserInfoKey]);
+
+    if (value == nil)
+        return;
+
+    const auto masterScale = juce::Desktop::getInstance().getGlobalScaleFactor();
+    const CGRect kbFrameUI = [value CGRectValue];
+    const double kbLeftJuce   = (double) kbFrameUI.origin.x                          / (double) masterScale;
+    const double kbTopJuce    = (double) kbFrameUI.origin.y                          / (double) masterScale;
+    const double kbRightJuce  = (double) (kbFrameUI.origin.x + kbFrameUI.size.width) / (double) masterScale;
+    const double kbBottomJuce = (double) (kbFrameUI.origin.y + kbFrameUI.size.height) / (double) masterScale;
+    const double kbCentreJuceY = (kbTopJuce + kbBottomJuce) * 0.5;
+
+    const auto screen = display->totalArea;
+    const bool reachesLeft  = kbLeftJuce  <= (double) screen.getX();
+    const bool reachesRight = kbRightJuce >= (double) screen.getRight();
+    const bool keyboardIsDockedBottom = reachesLeft
+                                     && reachesRight
+                                     && kbCentreJuceY > (double) screen.getCentreY();
+
+    if (! keyboardIsDockedBottom)
+    {
+        [self juceApplyLiftPoints: 0 fromUserInfo: userInfo];
+        return;
+    }
+
+    auto* target = owner->findCurrentTextInputTarget();
+    auto* targetComponent = dynamic_cast<juce::Component*> (target);
+
+    if (targetComponent == nullptr)
+    {
+        [self juceApplyLiftPoints: 0 fromUserInfo: userInfo];
+        return;
+    }
+
+    // The field's natural (un-lifted) screen position. Add back the current lift expressed in
+    // JUCE pixels so we don't chase our own shift on repeated notifications.
+    const double currentLiftJuce = (double) juceKeyboardLiftPoints / (double) masterScale;
+    const double fieldBottomJuce = (double) targetComponent->getScreenBounds().getBottom() + currentLiftJuce;
+    constexpr double paddingAboveKeyboard = 16.0;
+    const double desiredOffsetJuce = juce::jmax (0.0, fieldBottomJuce + paddingAboveKeyboard - kbTopJuce);
+    const CGFloat desiredOffsetPoints = (CGFloat) (desiredOffsetJuce * (double) masterScale);
+
+    [self juceApplyLiftPoints: desiredOffsetPoints fromUserInfo: userInfo];
+}
+
+- (void) juceKeyboardWillHide: (NSNotification*) note
+{
+    [self juceApplyLiftPoints: 0 fromUserInfo: [note userInfo]];
+}
+
+- (void) juceApplyLiftPoints: (CGFloat) offset fromUserInfo: (NSDictionary*) userInfo
+{
+    if (juceKeyboardLiftPoints == offset)
+        return;
+
+    juceKeyboardLiftPoints = offset;
+
+    NSTimeInterval duration = 0.25;
+    UIViewAnimationOptions options = UIViewAnimationOptionCurveEaseInOut;
+
+    if (userInfo != nil)
+    {
+        if (auto* durationValue = static_cast<NSNumber*> ([userInfo objectForKey: UIKeyboardAnimationDurationUserInfoKey]))
+            duration = [durationValue doubleValue];
+
+        if (auto* curveValue = static_cast<NSNumber*> ([userInfo objectForKey: UIKeyboardAnimationCurveUserInfoKey]))
+            options = (UIViewAnimationOptions) ([curveValue integerValue] << 16);
+    }
+
+    [UIView animateWithDuration: duration
+                          delay: 0
+                        options: options | UIViewAnimationOptionBeginFromCurrentState
+                     animations: ^
+    {
+        self.transform = CGAffineTransformMakeTranslation (0, -offset);
+    }
+                     completion: nil];
+}
+#endif
 
 @end
 
