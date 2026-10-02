@@ -348,6 +348,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         setAudioSessionActive (true);
         updateHardwareInfo();
+        setPreferredChannelCountsToMaximum();
         channelData.reconfigure ({}, {});
         setAudioSessionActive (false);
 
@@ -386,6 +387,32 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         JUCE_NSERROR_CHECK ([[AVAudioSession sharedInstance] setCategory: category
                                                              withOptions: options
                                                                    error: &error]);
+    }
+
+    // The route only lists the session's current channel count, which iOS defaults to stereo.
+    // It needs an active session with its category set, so call it right before reading the route.
+    static void setPreferredChannelCountsToMaximum()
+    {
+        auto session = [AVAudioSession sharedInstance];
+
+        if ([session.category isEqualToString: AVAudioSessionCategoryPlayAndRecord]
+            && session.isInputAvailable
+            && session.inputNumberOfChannels < session.maximumInputNumberOfChannels)
+        {
+            JUCE_NSERROR_CHECK ([session setPreferredInputNumberOfChannels: session.maximumInputNumberOfChannels
+                                                                     error: &error]);
+        }
+
+        if (session.outputNumberOfChannels < session.maximumOutputNumberOfChannels)
+        {
+            JUCE_NSERROR_CHECK ([session setPreferredOutputNumberOfChannels: session.maximumOutputNumberOfChannels
+                                                                      error: &error]);
+        }
+
+        JUCE_IOS_AUDIO_LOG ("Channel counts: input " << (int) session.inputNumberOfChannels
+                            << " of " << (int) session.maximumInputNumberOfChannels
+                            << ", output " << (int) session.outputNumberOfChannels
+                            << " of " << (int) session.maximumOutputNumberOfChannels);
     }
 
     static void setAudioSessionActive (bool enabled)
@@ -701,6 +728,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         setAudioSessionActive (true);
         setAudioSessionCategory (requestedInputChannels > 0 ? AVAudioSessionCategoryPlayAndRecord
                                                             : AVAudioSessionCategoryPlayback);
+        setPreferredChannelCountsToMaximum();
         channelData.reconfigure (requestedInputChannels, requestedOutputChannels);
         setTargetSampleRateAndBufferSize();
         updateHardwareInfo (true);
@@ -1357,6 +1385,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         if (isRunning)
         {
+            setPreferredChannelCountsToMaximum();
             channelData.reconfigure (requestedInputChannels, requestedOutputChannels);
 
             createAudioUnit();
