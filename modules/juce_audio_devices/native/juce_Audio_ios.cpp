@@ -750,7 +750,15 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                  const BigInteger& outputChannelsWanted,
                  double sampleRateWanted, int bufferSizeWanted)
     {
-        close();
+        const auto bufferSizeToTarget = bufferSizeWanted > 0 ? bufferSizeWanted : defaultBufferSize;
+
+        // A reopen at the same rate and buffer size, such as a channel change, keeps the session active.
+        // Reactivating it waits for a substitute audio unit callback on iOS 18 and later, up to a second.
+        const auto keepSessionActive = isRunning
+                                    && exactlyEqual (sampleRateWanted, targetSampleRate)
+                                    && bufferSizeToTarget == targetBufferSize;
+
+        close (! keepSessionActive);
 
         firstHostTime = true;
         lastNumFrames = 0;
@@ -760,15 +768,18 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         requestedInputChannels  = inputChannelsWanted;
         requestedOutputChannels = outputChannelsWanted;
         targetSampleRate = sampleRateWanted;
-        targetBufferSize = bufferSizeWanted > 0 ? bufferSizeWanted : defaultBufferSize;
+        targetBufferSize = bufferSizeToTarget;
 
         JUCE_IOS_AUDIO_LOG ("Opening audio device:"
                             <<  " inputChannelsWanted: "  << requestedInputChannels .toString (2)
                             << ", outputChannelsWanted: " << requestedOutputChannels.toString (2)
                             << ", targetSampleRate: " << targetSampleRate
-                            << ", targetBufferSize: " << targetBufferSize);
+                            << ", targetBufferSize: " << targetBufferSize
+                            << ", keepSessionActive: " << (int) keepSessionActive);
 
-        setAudioSessionActive (true);
+        if (! keepSessionActive)
+            setAudioSessionActive (true);
+
         setAudioSessionCategory (requestedInputChannels > 0 ? AVAudioSessionCategoryPlayAndRecord
                                                             : AVAudioSessionCategoryPlayback);
         preferExternalInputOverBuiltInMic();
@@ -796,7 +807,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         return lastError;
     }
 
-    void close()
+    void close (bool deactivateSession = true)
     {
         stop();
 
@@ -811,7 +822,8 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                 audioUnit = nullptr;
             }
 
-            setAudioSessionActive (false);
+            if (deactivateSession)
+                setAudioSessionActive (false);
         }
     }
 
