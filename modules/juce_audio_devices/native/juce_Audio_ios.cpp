@@ -347,6 +347,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         setAudioSessionCategory (AVAudioSessionCategoryPlayAndRecord);
 
         setAudioSessionActive (true);
+        preferExternalInputOverBuiltInMic();
         updateHardwareInfo();
         setPreferredChannelCountsToMaximum();
         channelData.reconfigure ({}, {});
@@ -413,6 +414,48 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                             << " of " << (int) session.maximumInputNumberOfChannels
                             << ", output " << (int) session.outputNumberOfChannels
                             << " of " << (int) session.maximumOutputNumberOfChannels);
+    }
+
+    // On iOS 27 a play-and-record session can pick the built-in mic as input while an interface is connected.
+    // Setting the category can re-route the session, so call this after setting it and before reading the route.
+    static void preferExternalInputOverBuiltInMic()
+    {
+        auto session = [AVAudioSession sharedInstance];
+
+        if (! [session.category isEqualToString: AVAudioSessionCategoryPlayAndRecord])
+            return;
+
+        bool inputIsBuiltInMic = false;
+
+        for (AVAudioSessionPortDescription* port in session.currentRoute.inputs)
+            if ([port.portType isEqualToString: AVAudioSessionPortBuiltInMic])
+                inputIsBuiltInMic = true;
+
+        if (! inputIsBuiltInMic)
+            return;
+
+        AVAudioSessionPortDescription* externalInput = nil;
+
+        for (AVAudioSessionPortDescription* port in session.availableInputs)
+        {
+            if ([port.portType isEqualToString: AVAudioSessionPortUSBAudio])
+            {
+                externalInput = port;
+                break;
+            }
+
+            // A Bluetooth headset mic is narrowband and would pull the session rate down, so it never replaces the built-in mic.
+            if (externalInput == nil
+                && ! [port.portType isEqualToString: AVAudioSessionPortBuiltInMic]
+                && ! [port.portType isEqualToString: AVAudioSessionPortBluetoothHFP])
+            {
+                externalInput = port;
+            }
+        }
+
+        if (externalInput != nil)
+            JUCE_NSERROR_CHECK ([session setPreferredInput: externalInput
+                                                     error: &error]);
     }
 
     static void setAudioSessionActive (bool enabled)
@@ -728,6 +771,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         setAudioSessionActive (true);
         setAudioSessionCategory (requestedInputChannels > 0 ? AVAudioSessionCategoryPlayAndRecord
                                                             : AVAudioSessionCategoryPlayback);
+        preferExternalInputOverBuiltInMic();
         setPreferredChannelCountsToMaximum();
         channelData.reconfigure (requestedInputChannels, requestedOutputChannels);
         setTargetSampleRateAndBufferSize();
