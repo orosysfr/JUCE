@@ -637,6 +637,40 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         return getSampleRate();
     }
 
+    static NSString* savedSampleRatesKey()
+    {
+        return @"JuceIOSAudioSampleRatesByRoute";
+    }
+
+    static Array<double> loadSavedSampleRates (const String& routeId)
+    {
+        Array<double> rates;
+        NSDictionary* saved = [[NSUserDefaults standardUserDefaults] dictionaryForKey: savedSampleRatesKey()];
+        id list = saved[juceStringToNS (routeId)];
+
+        if ([list isKindOfClass: [NSArray class]])
+            for (id value in (NSArray*) list)
+                if ([value isKindOfClass: [NSNumber class]])
+                    rates.add ([(NSNumber*) value doubleValue]);
+
+        return rates;
+    }
+
+    static void saveSampleRates (const String& routeId, const Array<double>& rates)
+    {
+        auto defaults = [NSUserDefaults standardUserDefaults];
+        NSDictionary* existing = [defaults dictionaryForKey: savedSampleRatesKey()];
+        NSMutableDictionary* saved = existing != nil ? [NSMutableDictionary dictionaryWithDictionary: existing]
+                                                     : [NSMutableDictionary dictionary];
+        NSMutableArray* list = [NSMutableArray array];
+
+        for (auto rate : rates)
+            [list addObject: [NSNumber numberWithDouble: rate]];
+
+        saved[juceStringToNS (routeId)] = list;
+        [defaults setObject: saved forKey: savedSampleRatesKey()];
+    }
+
     // Important: the supported audio sample rates change on the iPhone 6S
     // depending on whether the headphones are plugged in or not!
     void updateAvailableSampleRates()
@@ -666,8 +700,16 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                  + describePorts (route.outputs, "o");
         });
 
-        availableSampleRates = deviceSampleRatesCache.get (deviceId, [&] ([[maybe_unused]] auto key)
+        availableSampleRates = deviceSampleRatesCache.get (deviceId, [&] (auto key)
         {
+            // Probing switches the hardware through every rate and blocks the message thread for seconds, so a route's result is kept across launches.
+            // A saved list that lacks the rate the session runs at is out of date and is probed again.
+            if (const auto saved = loadSavedSampleRates (key); saved.contains (getSampleRate()))
+            {
+                JUCE_IOS_AUDIO_LOG ("Using saved sample rates for: " << key);
+                return saved;
+            }
+
             JUCE_IOS_AUDIO_LOG ("Finding supported sample rates for: " << key);
 
             Array<double> sampleRates;
@@ -677,22 +719,28 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                                                          dispatchAudioUnitPropertyChange,
                                                          this);
 
-            const double lowestRate = trySampleRate (4000);
-            sampleRates.add (lowestRate);
-            const double highestRate = trySampleRate (192000);
+            const auto rateBeforeProbe = getSampleRate();
 
-            JUCE_IOS_AUDIO_LOG ("Lowest supported sample rate: "  << lowestRate);
-            JUCE_IOS_AUDIO_LOG ("Highest supported sample rate: " << highestRate);
-
-            for (double rate = lowestRate + 1000; rate < highestRate; rate += 1000)
+            // iOS sometimes ignores a rate request and keeps the current rate, so each standard rate is requested on its own, retried once, and kept only on an exact match.
+            for (auto rate : { 44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0 })
             {
-                const double supportedRate = trySampleRate (rate);
+                auto supportedRate = trySampleRate (rate);
+
+                if (! exactlyEqual (supportedRate, rate))
+                {
+                    Thread::sleep (100);
+                    supportedRate = trySampleRate (rate);
+                }
+
                 JUCE_IOS_AUDIO_LOG ("Trying a sample rate of " << rate << ", got " << supportedRate);
-                sampleRates.addIfNotAlreadyThere (supportedRate);
-                rate = jmax (rate, supportedRate);
+
+                if (exactlyEqual (supportedRate, rate))
+                    sampleRates.add (rate);
             }
 
-            sampleRates.addIfNotAlreadyThere (highestRate);
+            // A route can run at a rate outside the standard list, and that rate must stay selectable.
+            sampleRates.addIfNotAlreadyThere (rateBeforeProbe);
+            sampleRates.sort();
 
             sampleRate = trySampleRate (sampleRate);
 
@@ -718,6 +766,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
             JUCE_IOS_AUDIO_LOG ("Sample rate after detecting available sample rates: " << sampleRate);
 
+            saveSampleRates (key, sampleRates);
             return sampleRates;
         });
 
