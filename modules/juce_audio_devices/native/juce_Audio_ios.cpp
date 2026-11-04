@@ -208,11 +208,12 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 namespace juce {
 
 #ifndef JUCE_IOS_AUDIO_LOGGING
- #define JUCE_IOS_AUDIO_LOGGING 0
+ #define JUCE_IOS_AUDIO_LOGGING 1
 #endif
 
 #if JUCE_IOS_AUDIO_LOGGING
- #define JUCE_IOS_AUDIO_LOG(x)  DBG(x)
+ // Logger rather than DBG, so the lines reach the application log in Release builds too.
+ #define JUCE_IOS_AUDIO_LOG(x)  do { String iosAudioLogLine ("iOS audio: "); iosAudioLogLine << x; Logger::writeToLog (iosAudioLogLine); } while (false)
 #else
  #define JUCE_IOS_AUDIO_LOG(x)
 #endif
@@ -708,7 +709,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
             {
                 String info ("Available sample rates:");
 
-                for (auto rate : availableSampleRates)
+                for (auto rate : sampleRates)
                     info << " " << rate;
 
                 JUCE_IOS_AUDIO_LOG (info);
@@ -719,6 +720,18 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
             return sampleRates;
         });
+
+       #if JUCE_IOS_AUDIO_LOGGING
+        {
+            // Logged on every call because a cached list is served without probing.
+            String info ("Sample rates for route " + deviceId + ":");
+
+            for (auto rate : availableSampleRates)
+                info << " " << rate;
+
+            JUCE_IOS_AUDIO_LOG (info);
+        }
+       #endif
     }
 
     void updateHardwareInfo (bool forceUpdate = false)
