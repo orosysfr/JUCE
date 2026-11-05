@@ -637,15 +637,20 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         return getSampleRate();
     }
 
-    static NSString* savedSampleRatesKey()
+    static NSString* confirmedSampleRatesKey()
     {
-        return @"JuceIOSAudioSampleRatesByRoute";
+        return @"JuceIOSAudioConfirmedSampleRatesByRoute";
     }
 
-    static Array<double> loadSavedSampleRates (const String& routeId)
+    static NSString* pendingSampleRatesKey()
+    {
+        return @"JuceIOSAudioPendingSampleRatesByRoute";
+    }
+
+    static Array<double> loadSampleRates (NSString* defaultsKey, const String& routeId)
     {
         Array<double> rates;
-        NSDictionary* saved = [[NSUserDefaults standardUserDefaults] dictionaryForKey: savedSampleRatesKey()];
+        NSDictionary* saved = [[NSUserDefaults standardUserDefaults] dictionaryForKey: defaultsKey];
         id list = saved[juceStringToNS (routeId)];
 
         if ([list isKindOfClass: [NSArray class]])
@@ -656,19 +661,34 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         return rates;
     }
 
-    static void saveSampleRates (const String& routeId, const Array<double>& rates)
+    static void writeSampleRates (NSString* defaultsKey, const String& routeId, NSArray* list)
     {
         auto defaults = [NSUserDefaults standardUserDefaults];
-        NSDictionary* existing = [defaults dictionaryForKey: savedSampleRatesKey()];
+        NSDictionary* existing = [defaults dictionaryForKey: defaultsKey];
         NSMutableDictionary* saved = existing != nil ? [NSMutableDictionary dictionaryWithDictionary: existing]
                                                      : [NSMutableDictionary dictionary];
+
+        if (list != nil)
+            saved[juceStringToNS (routeId)] = list;
+        else
+            [saved removeObjectForKey: juceStringToNS (routeId)];
+
+        [defaults setObject: saved forKey: defaultsKey];
+    }
+
+    static void saveSampleRates (NSString* defaultsKey, const String& routeId, const Array<double>& rates)
+    {
         NSMutableArray* list = [NSMutableArray array];
 
         for (auto rate : rates)
             [list addObject: [NSNumber numberWithDouble: rate]];
 
-        saved[juceStringToNS (routeId)] = list;
-        [defaults setObject: saved forKey: savedSampleRatesKey()];
+        writeSampleRates (defaultsKey, routeId, list);
+    }
+
+    static void forgetSampleRates (NSString* defaultsKey, const String& routeId)
+    {
+        writeSampleRates (defaultsKey, routeId, nil);
     }
 
     // Important: the supported audio sample rates change on the iPhone 6S
@@ -702,12 +722,12 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         availableSampleRates = deviceSampleRatesCache.get (deviceId, [&] (auto key)
         {
-            // Probing switches the hardware through every rate and blocks the message thread for seconds, so a route's result is kept across launches.
-            // A saved list that lacks the rate the session runs at is out of date and is probed again.
-            if (const auto saved = loadSavedSampleRates (key); saved.contains (getSampleRate()))
+            // Probing switches the hardware through every rate and blocks the message thread for seconds, so a route's confirmed result is kept across launches.
+            // A confirmed list that lacks the rate the session runs at is out of date and is probed again.
+            if (const auto confirmed = loadSampleRates (confirmedSampleRatesKey(), key); confirmed.contains (getSampleRate()))
             {
-                JUCE_IOS_AUDIO_LOG ("Using saved sample rates for: " << key);
-                return saved;
+                JUCE_IOS_AUDIO_LOG ("Using confirmed sample rates for: " << key);
+                return confirmed;
             }
 
             JUCE_IOS_AUDIO_LOG ("Finding supported sample rates for: " << key);
@@ -766,7 +786,19 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
             JUCE_IOS_AUDIO_LOG ("Sample rate after detecting available sample rates: " << sampleRate);
 
-            saveSampleRates (key, sampleRates);
+            // An ignored request looks the same as an unsupported rate, so a list is kept only once an earlier probe of the route found the same rates.
+            if (loadSampleRates (pendingSampleRatesKey(), key) == sampleRates)
+            {
+                saveSampleRates (confirmedSampleRatesKey(), key, sampleRates);
+                forgetSampleRates (pendingSampleRatesKey(), key);
+                JUCE_IOS_AUDIO_LOG ("Sample rates confirmed for: " << key);
+            }
+            else
+            {
+                saveSampleRates (pendingSampleRatesKey(), key, sampleRates);
+                JUCE_IOS_AUDIO_LOG ("Sample rates used for this session only, until a second probe agrees: " << key);
+            }
+
             return sampleRates;
         });
 
